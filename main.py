@@ -132,7 +132,6 @@ def edit_message(chat_id, message_id, text):
 
 def send_document(chat_id, path: Path, caption=None):
     """آپلود multipart فایل (حداکثر ۵۰ مگ طبق مستندات بله) با تلاش مجدد."""
-    api("sendChatAction", chat_id=chat_id, action="upload_document")
     url = f"{API_BASE}/bot{BOT_TOKEN}/sendDocument"
     data = {"chat_id": str(chat_id)}
     if caption:
@@ -290,7 +289,23 @@ def process_job(chat_id, url):
             else:
                 edit_message(chat_id, prog_id, f"⬇️ {human(done)} دانلود شد…")
 
-        meta = download_file(url, dest, cb)
+        # تلاش مجدد خودکار برای دانلود (سرورها گاهی وسط کار قطع می‌کنند)
+        meta = None
+        last_err = None
+        for attempt in range(1, 4):
+            try:
+                state.update(t=0.0, pct=-1)
+                meta = download_file(url, dest, cb)
+                break
+            except requests.RequestException as e:
+                last_err = e
+                log.warning("download attempt %d/3 failed: %s", attempt, e)
+                dest.unlink(missing_ok=True)  # فایل ناقص پاک شود
+                if attempt < 3:
+                    edit_message(chat_id, prog_id, f"⚠️ اتصال قطع شد؛ تلاش مجدد {attempt + 1} از 3…")
+                    time.sleep(3)
+        if meta is None:
+            raise last_err
         if meta.get("html"):
             edit_message(chat_id, prog_id, MSG_HTML)
             return
