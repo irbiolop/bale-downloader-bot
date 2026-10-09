@@ -4,5 +4,8 @@ work_tg/
 bot.log
 offset.json
 offset_tg.json
+state.json
+state.json.tmp
 *.zip
 *.part
+yt_cookies.txt
