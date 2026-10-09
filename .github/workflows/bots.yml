@@ -34,6 +34,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      # حفظ state.json (سشن تلگرام/توکن گیت‌هاب/کانال‌ها) بین سیکل‌ها
+      - name: Restore state
+        uses: actions/cache@v4
+        with:
+          path: |
+            state.json
+            offset_tg.json
+          key: bale-state-${{ github.run_id }}
+          restore-keys: bale-state-
+
       - name: Install deps
         run: pip install -r requirements.txt
 
@@ -42,6 +52,11 @@ jobs:
         env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}   # توکن ربات بله (Secret)
           TG_TOKEN:  ${{ secrets.TG_TOKEN }}    # توکن ربات تلگرام (Secret)
+          OWNER_ID:  ${{ secrets.OWNER_ID }}    # فقط این کاربر مجاز است
+          GH_PAT:    ${{ secrets.GH_PAT }}      # ابزار گیت‌هاب
+          TG_API_ID: ${{ secrets.TG_API_ID }}
+          TG_API_HASH: ${{ secrets.TG_API_HASH }}
+          YT_COOKIES: ${{ secrets.YT_COOKIES }}
           MINUTES:   ${{ github.event.inputs.minutes || '330' }}
           WITH_TG:   ${{ github.event.inputs.with_tg || 'false' }}
         run: |
