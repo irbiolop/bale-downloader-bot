@@ -31,7 +31,7 @@ from urllib.parse import urlparse, unquote
 import requests
 
 # ---------------- تنظیمات (همه با متغیر محیطی قابل تغییر هستند) ----------------
-BOT_TOKEN  = os.getenv("BOT_TOKEN", "1236650446:viLT-1kk41c8vFwkVbHgmnpQZp0yBo6y_nQ")
+BOT_TOKEN  = os.getenv("BOT_TOKEN", "").strip()   # ⚠️ توکن فقط از متغیر محیطی/Secret — در کد ذخیره نمی‌شود
 API_BASE   = os.getenv("API_BASE", "https://tapi.bale.ai").rstrip("/")
 CHUNK_MB   = int(os.getenv("CHUNK_MB", "20"))      # اندازه‌ی هر پارت (مگابایت)
 MAX_MB     = int(os.getenv("MAX_MB", "2048"))      # حداکثر حجم قابل دانلود (مگابایت)
@@ -440,7 +440,16 @@ def poll_loop():
 # ---------------- اجرای اصلی با سوپروایزر همیشگی ----------------
 def main():
     WORK_DIR.mkdir(parents=True, exist_ok=True)
-    me = api("getMe")
+    if not BOT_TOKEN:
+        log.error("BOT_TOKEN تنظیم نشده است! مثال:  export BOT_TOKEN='123456:ABCDEF'")
+        sys.exit(1)
+    me = None
+    for attempt in range(6):  # چند بار تلاش کن (اتصال موقت شبکه باعث مرگ زنجیره نشود)
+        me = api("getMe")
+        if me:
+            break
+        log.warning("getMe failed (attempt %d/6) → retry in 10s", attempt + 1)
+        time.sleep(10)
     if not me:
         log.error("اتصال به API برقرار نشد یا توکن نامعتبر است.")
         sys.exit(1)

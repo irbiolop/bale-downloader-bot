@@ -1,0 +1,80 @@
+name: bot-loop
+
+# ♾️ زنجیره‌ی خودبازتولید:
+#   هر اجرا ≈ ۵.۵ ساعت ربات‌ها را اجرا می‌کند و پیش از پایان، اجرای بعدی را
+#   خودش dispatch می‌کند. یک schedule شش‌ساعته هم به‌عنوان پشتیبان هست.
+#   ⚠️ نکته: کل زنجیره فقط یک job فعال نگه می‌دارد (concurrency).
+
+on:
+  workflow_dispatch:
+    inputs:
+      minutes:
+        description: "طول هر سیکل به دقیقه (پیش‌فرض 330)"
+        required: false
+        default: "330"
+      with_tg:
+        description: "ربات تلگرام هم اجرا شود؟ (true/false)"
+        required: false
+        default: "false"
+  schedule:
+    - cron: "0 */6 * * *"   # پشتیبان: اگر زنجیره به هر دلیل قطع شد، زنده‌اش می‌کند
+
+permissions:
+  contents: write   # heartbeat commit
+  actions: write    # self re-dispatch
+
+concurrency:
+  group: bot-loop
+  cancel-in-progress: true
+
+jobs:
+  bots:
+    runs-on: ubuntu-latest
+    timeout-minutes: 345
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install deps
+        run: pip install -r requirements.txt
+
+      - name: Run bots (cycle)
+        id: bot
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}   # توکن ربات بله (Secret)
+          TG_TOKEN:  ${{ secrets.TG_TOKEN }}    # توکن ربات تلگرام (Secret)
+          MINUTES:   ${{ github.event.inputs.minutes || '330' }}
+          WITH_TG:   ${{ github.event.inputs.with_tg || 'false' }}
+        run: |
+          chmod +x run.sh run-actions.sh
+          timeout "${MINUTES}m" ./run-actions.sh
+          code=$?
+          echo "cycle exit code: $code"
+          # 124 = پایان طبیعی سیکل (timeout)؛ 0 = خروج معمولی؛ بقیه = خطای واقعی
+          case "$code" in
+            0|124) exit 0 ;;
+            *)     exit "$code" ;;
+          esac
+
+      - name: Heartbeat
+        if: success()
+        run: |
+          date -u +"%Y-%m-%d %H:%M:%S UTC" > .github/last-run.txt
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add .github/last-run.txt
+          git diff --cached --quiet || git commit -q -m "heartbeat: bots alive [skip ci]"
+          git push -q origin HEAD || echo "heartbeat push failed (non-fatal)"
+
+      - name: Re-arm next cycle
+        if: success()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "↻ re-arming next cycle..."
+          curl -sS -f -X POST \
+            -H "Authorization: Bearer $GH_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/bots.yml/dispatches" \
+            -d '{"ref":"main"}'
+          echo "✓ next cycle dispatched"
+          sleep 10

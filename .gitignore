@@ -1,6 +1,8 @@
 __pycache__/
 work/
+work_tg/
 bot.log
 offset.json
+offset_tg.json
 *.zip
 *.part
