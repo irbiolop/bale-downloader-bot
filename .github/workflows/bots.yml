@@ -46,8 +46,9 @@ jobs:
           WITH_TG:   ${{ github.event.inputs.with_tg || 'false' }}
         run: |
           chmod +x run.sh run-actions.sh
-          timeout "${MINUTES}m" ./run-actions.sh
-          code=$?
+          code=0
+          # ⚠️ با bash -e نمی‌توان از $? بعد از خطا استفاده کرد؛ پس با || بگیریم
+          timeout "${MINUTES}m" ./run-actions.sh || code=$?
           echo "cycle exit code: $code"
           # 124 = پایان طبیعی سیکل (timeout)؛ 0 = خروج معمولی؛ بقیه = خطای واقعی
           case "$code" in
