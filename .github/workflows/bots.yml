@@ -72,10 +72,17 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           echo "↻ re-arming next cycle..."
-          curl -sS -f -X POST \
-            -H "Authorization: Bearer $GH_TOKEN" \
-            -H "Accept: application/vnd.github+json" \
-            "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/bots.yml/dispatches" \
-            -d '{"ref":"main"}'
-          echo "✓ next cycle dispatched"
+          ok=0
+          for i in 1 2 3; do
+            if curl -sS -f -X POST \
+              -H "Authorization: Bearer $GH_TOKEN" \
+              -H "Accept: application/vnd.github+json" \
+              "https://api.github.com/repos/${GITHUB_REPOSITORY}/actions/workflows/bots.yml/dispatches" \
+              -d '{"ref":"main"}'; then
+              ok=1; echo "✓ next cycle dispatched (attempt $i)"; break
+            else
+              echo "dispatch attempt $i failed → retry in 20s"; sleep 20
+            fi
+          done
+          [ "$ok" = "1" ] || exit 1
           sleep 10
