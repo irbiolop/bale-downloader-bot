@@ -1,8 +1,9 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-🔍 ابزار جستجو — زنجیره‌ی چندموتوره با فالبک خودکار:
-  Google → DuckDuckGo → Bing → Google News RSS (تقریباً همیشه در دسترس)
+🔍 ابزار جستجو — از طریق Worker کلادفلر (گوگل واقعی → DDG → Bing با اسنیپت)،
+و اگر پروکسی در دسترس نبود، زنجیره‌ی محلی قدیمی:
+  Google → DuckDuckGo → Bing → Google News RSS
 عدد نتیجه را بفرست → ابزار HTML همان صفحه فعال می‌شود.
 """
 
@@ -12,7 +13,8 @@ from urllib.parse import unquote
 
 import requests
 
-from botcore import BROWSER_UA, HOME_KB, bg, btn, kb, send_message
+from botcore import (BROWSER_UA, HOME_KB, PROXY_ON, bg, btn, kb, proxy_get,
+                     send_message)
 
 UA = {"User-Agent": BROWSER_UA, "Accept-Language": "fa,en;q=0.8"}
 _s = requests.Session()
@@ -100,7 +102,20 @@ def _gnews(q, n=10):
 
 
 def search(q, n=8):
-    """زنجیره‌ی موتورها تا اولین نتیجه‌ی غیرخالی. خروجی: (نتایج, نام موتور)"""
+    """اول پروکسی (کیفیت واقعی حتی از سرور)، بعد زنجیره‌ی محلی. خروجی: (نتایج, نام موتور)"""
+    # ۱) Worker کلادفلر: گوگل واقعی → DDG → Bing (با اسنیپت)
+    d = proxy_get("/google", q=q, num=n, timeout=45)
+    if d and d.get("results"):
+        rs = []
+        for r in d["results"]:
+            if not r.get("url"):
+                continue
+            rs.append({"title": r.get("title") or "", "url": r["url"],
+                       "snippet": (r.get("snippet") or "")[:160]})
+        if rs:
+            eng = d.get("engine") or "Web"
+            return rs[:n], f"{eng} (پروکسی)"
+    # ۲) فالبک محلی (اگر PROXY_BASE ست نشده یا ورکر پاسخ نداد)
     for fn, name in ((_google, "Google"), (_ddg, "DuckDuckGo"), (_bing, "Bing"), (_gnews, "Google News")):
         try:
             rs = fn(q, n)
@@ -155,7 +170,7 @@ def handle(chat_id, text, st):
         import tools.htmlfetch as htmlfetch
         bg(htmlfetch.fetch_and_send, chat_id, url)
         return
-    send_message(chat_id, f"🔍 در حال جستجوی «{t}» …")
+    send_message(chat_id, f"🔍 در حال جستجوی «{t}» {'(از طریق پروکسی) ' if PROXY_ON else ''}…")
     rs, engine = search(t)
     if not rs:
         send_message(chat_id, "نتیجه‌ای پیدا نشد یا همه‌ی موتورهای جستجو پاسخ ندادند.\n"

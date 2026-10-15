@@ -16,7 +16,7 @@ import shutil
 import threading
 import time
 from pathlib import Path
-from urllib.parse import urlparse, unquote
+from urllib.parse import urlparse, unquote, quote
 
 import requests
 
@@ -30,6 +30,14 @@ WORKERS    = int(os.getenv("WORKERS", "2"))         # تعداد دانلود ه
 WORK_DIR   = Path(os.getenv("WORK_DIR", "./work"))
 STATE_FILE = Path(os.getenv("STATE_FILE", "./state.json"))
 OWNER_ID   = os.getenv("OWNER_ID", "").strip()      # اگر ست شود، فقط همین کاربر اجازه دارد
+
+# ---------------- پروکسی Cloudflare Worker (گوگل/یوتیوب) ----------------
+# اگر PROXY_BASE ست باشد، سرچ گوگل/یوتیوب و دانلود یوتیوب از طریق ورکر انجام می‌شود
+# (حتی از IP دیتاسنتر) — کلید در PROXY_KEY.
+PROXY_BASE = os.getenv("PROXY_BASE", "").strip().rstrip("/")
+PROXY_KEY  = os.getenv("PROXY_KEY", "").strip()
+PROXY_ON   = bool(PROXY_BASE)
+PROXY_LABEL = f"{PROXY_BASE.split('//')[-1].split('.')[0]}" if PROXY_ON else ""
 
 CHUNK    = CHUNK_MB * 1024 * 1024
 MAX_SIZE = MAX_MB * 1024 * 1024
@@ -132,6 +140,32 @@ def bg(fn, *args, **kw):
             print("bg task error:")
             traceback.print_exc()
     threading.Thread(target=_w, daemon=True).start()
+
+
+# ---------------- کلاینت پروکسی ----------------
+def proxy_get(path, timeout=40, **params):
+    """درخواست JSON به Worker پروکسی؛ خروجی dict یا None (پروکسی ست نیست/خطا)."""
+    if not PROXY_ON:
+        return None
+    if PROXY_KEY:
+        params["key"] = PROXY_KEY
+    try:
+        r = http.get(f"{PROXY_BASE}{path}", params=params, timeout=timeout)
+        if r.status_code != 200:
+            return None
+        return r.json()
+    except Exception:  # noqa: BLE001
+        return None
+
+
+def proxy_url(target):
+    """لینک دانلود استریمی از مسیر پروکسی (اگر فعال؛ وگرنه همان لینک)."""
+    if not PROXY_ON:
+        return target
+    q = f"{PROXY_BASE}/proxy?url={quote(str(target), safe='')}"
+    if PROXY_KEY:
+        q += f"&key={PROXY_KEY}"
+    return q
 
 
 # ---------------- لایه‌ی Bot API ----------------

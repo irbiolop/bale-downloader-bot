@@ -9,3 +9,4 @@ state.json.tmp
 *.zip
 *.part
 yt_cookies.txt
+.env

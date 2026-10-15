@@ -31,7 +31,7 @@ from urllib.parse import unquote, urlparse
 import requests
 
 from botcore import (API, BOT_TOKEN, CHUNK, CHUNK_MB, EXT_BY_CTYPE, HOME_KB, MAX_MB,
-                     MAX_SIZE, MENU_KB, OWNER_ID, STATE_FILE, TOOL_TEXT, TooBig, WELCOME,
+                     MAX_SIZE, MENU_KB, OWNER_ID, PROXY_BASE, STATE_FILE, TOOL_TEXT, TooBig, WELCOME,
                      WORK_DIR, WORKERS, api, answer_callback, chunk_text, drop_user,
                      edit_message, find_ffmpeg, human, kb, load_state, pick_filename,
                      sanitize, save_state, send_document, send_message, split_file,
@@ -263,6 +263,7 @@ def handle_message(msg):
                 f"⏱ آپ‌تایم این اجرا: {mins} دقیقه\n"
                 f"📥 پارت: {CHUNK_MB:.0f} مگ | حداکثر: {MAX_MB:.0f} مگ | همزمان: {WORKERS}\n"
                 f"📥 در صف دانلود: {job_q.qsize()}\n"
+                f"🛰 پروکسی: {'فعال ✅ ' + PROXY_BASE.split('//')[-1] if PROXY_BASE else 'خاموش ⚠️'}\n"
                 f"✈️ تلگرام: {'وصل ✅' if tg_on else 'قطع ❌'}\n"
                 f"🐙 گیت‌هاب: {'توکن تنظیم ✅' if gh._tok() else 'بدون توکن ❌'}\n"
                 f"🎵 ffmpeg: {'موجود ✅' if ff else 'نصب نیست (mp3 نمی‌سازم) ⚠️'}",

@@ -57,6 +57,8 @@ jobs:
           TG_API_ID: ${{ secrets.TG_API_ID }}
           TG_API_HASH: ${{ secrets.TG_API_HASH }}
           YT_COOKIES: ${{ secrets.YT_COOKIES }}
+          PROXY_KEY: ${{ secrets.PROXY_KEY }}   # کلید Worker پروکسی (Secret)
+          PROXY_BASE: ${{ vars.PROXY_BASE || 'https://bale-toolbox.kianirandev.workers.dev' }}
           MINUTES:   ${{ github.event.inputs.minutes || '330' }}
           WITH_TG:   ${{ github.event.inputs.with_tg || 'false' }}
         run: |
