@@ -12,7 +12,7 @@ from urllib.parse import unquote
 
 import requests
 
-from botcore import BROWSER_UA, HOME_KB, send_message
+from botcore import BROWSER_UA, HOME_KB, bg, btn, kb, send_message
 
 UA = {"User-Agent": BROWSER_UA, "Accept-Language": "fa,en;q=0.8"}
 _s = requests.Session()
@@ -111,6 +111,35 @@ def search(q, n=8):
     return [], None
 
 
+def _results_kb(res):
+    """هر نتیجه = یک دکمه؛ کاربر لازم نیست شماره تایپ کند."""
+    rows = []
+    for i, r in enumerate(res):
+        rows.append([btn(f"{i + 1}. {(r.get('title') or '?')[:48]}", f"gs:pick:{i}")])
+    rows.append([btn("🏠 منوی اصلی", "menu:home")])
+    return kb(rows)
+
+
+def callback(chat_id, act, st):
+    """دکمه‌های نتایج جستجو → HTML همان صفحه (در پس‌زمینه)."""
+    d = st["data"]
+    res = d.get("results") or []
+    if act.startswith("pick:"):
+        try:
+            i = int(act.split(":")[1])
+        except ValueError:
+            return
+        if not (0 <= i < len(res)):
+            send_message(chat_id, "این نتیجه دیگر در لیست نیست؛ دوباره جستجو کن.", kb=HOME_KB)
+            return
+        url = res[i]["url"]
+        send_message(chat_id, f"🌐 گرفتن HTML نتیجه‌ی {i + 1}…\n{url}")
+        import tools.htmlfetch as htmlfetch
+        bg(htmlfetch.fetch_and_send, chat_id, url)
+    else:
+        send_message(chat_id, "؟", kb=HOME_KB)
+
+
 def handle(chat_id, text, st):
     """حالت gsearch: عبارت جستجو یا شماره نتیجه (→ HTML)."""
     d = st["data"]
@@ -124,7 +153,7 @@ def handle(chat_id, text, st):
         url = res[i]["url"]
         send_message(chat_id, f"🌐 گرفتن HTML نتیجه‌ی {i + 1}…\n{url}")
         import tools.htmlfetch as htmlfetch
-        htmlfetch.fetch_and_send(chat_id, url)
+        bg(htmlfetch.fetch_and_send, chat_id, url)
         return
     send_message(chat_id, f"🔍 در حال جستجوی «{t}» …")
     rs, engine = search(t)
@@ -133,12 +162,10 @@ def handle(chat_id, text, st):
                               "عبارت دیگری را امتحان کن یا چند لحظه بعد دوباره بفرست.", kb=HOME_KB)
         return
     d["results"] = rs
-    lines = [f"🔍 نتایج «{t}» ({engine}):", ""]
+    lines = [f"🔍 نتایج «{t}» ({engine}):", "👇 روی هر نتیجه بزن تا سورس HTML همان صفحه را بگیری:", ""]
     for i, r in enumerate(rs, 1):
         lines.append(f"{i}. {r['title']}")
         lines.append(f"    {r['url']}")
         if r.get("snippet"):
             lines.append(f"    └ {r['snippet']}")
-    lines.append("")
-    lines.append("🔢 شماره نتیجه را بفرست تا HTML کامل آن صفحه را بگیری.")
-    send_message(chat_id, "\n".join(lines), kb=HOME_KB)
+    send_message(chat_id, "\n".join(lines), kb=_results_kb(rs))

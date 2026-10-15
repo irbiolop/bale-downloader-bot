@@ -12,8 +12,8 @@ import time
 
 import requests
 
-from botcore import (BROWSER_UA, CHUNK, HOME_KB, WORK_DIR, human, sanitize,
-                     send_document, send_message, send_photo, split_file)
+from botcore import (BROWSER_UA, CHUNK, HOME_KB, WORK_DIR, bg, btn, human, kb,
+                     sanitize, send_document, send_message, send_photo, split_file)
 
 _s = requests.Session()
 _s.headers.update({
@@ -190,12 +190,39 @@ def search_pins(q, n=10):
     return out[:n]
 
 
+def _results_kb(res):
+    """هر نتیجه = یک دکمه؛ کاربر لازم نیست شماره تایپ کند."""
+    rows = []
+    for i, p in enumerate(res):
+        rows.append([btn(f"{i + 1}. {(p.get('title') or 'پین')[:46]}", f"pin:pick:{i}")])
+    rows.append([btn("🏠 منوی اصلی", "menu:home")])
+    return kb(rows)
+
+
+def callback(chat_id, act, st):
+    """دکمه‌های نتایج جستجو → دانلود همان پین (در پس‌زمینه)."""
+    d = st["data"]
+    res = d.get("results") or []
+    if act.startswith("pick:"):
+        try:
+            i = int(act.split(":")[1])
+        except ValueError:
+            return
+        if not (0 <= i < len(res)):
+            send_message(chat_id, "این نتیجه دیگر در لیست نیست؛ دوباره جستجو کن.", kb=HOME_KB)
+            return
+        send_message(chat_id, f"📌 دانلود نتیجه {i + 1} در پس‌زمینه شروع شد…\n{res[i]['url']}")
+        bg(download_pin, chat_id, res[i]["url"])
+    else:
+        send_message(chat_id, "؟", kb=HOME_KB)
+
+
 def handle(chat_id, text, st):
     d = st["data"]
     t = (text or "").strip()
     if re.match(r"https?://", t, re.I):
-        send_message(chat_id, "📌 در حال دریافت پین…")
-        download_pin(chat_id, t)
+        send_message(chat_id, "📌 دانلود پین در پس‌زمینه شروع شد…")
+        bg(download_pin, chat_id, t)
         return
     if re.fullmatch(r"\d{1,2}", t):
         res = d.get("results") or []
@@ -203,24 +230,36 @@ def handle(chat_id, text, st):
         if not (0 <= i < len(res)):
             send_message(chat_id, "این شماره در نتایج نیست؛ اول جستجو کن.", kb=HOME_KB)
             return
-        send_message(chat_id, f"📌 دانلود نتیجه {i + 1}…\n{res[i]['url']}")
-        download_pin(chat_id, res[i]["url"])
+        send_message(chat_id, f"📌 دانلود نتیجه {i + 1} در پس‌زمینه شروع شد…\n{res[i]['url']}")
+        bg(download_pin, chat_id, res[i]["url"])
         return
     send_message(chat_id, f"🔍 جستجوی پینترست: «{t}» …")
+    res, note = [], ""
     try:
         res = search_pins(t)
     except Exception as e:  # noqa: BLE001
-        send_message(chat_id, f"❌ جستجو ناموفق بود ({e}).\n"
-                              "احتمالاً پینترست این سرور را محدود کرده؛ لینک پین را مستقیم بفرست.", kb=HOME_KB)
-        return
+        note = str(e)
     if not res:
-        send_message(chat_id, "چیزی پیدا نشد؛ عبارت دیگری امتحان کن.", kb=HOME_KB)
+        # فالبک: پیدا کردن پین‌های ایندکس‌شده از موتورهای جستجو
+        try:
+            import tools.gsearch as gsearch
+            rs, eng = gsearch.search(f"site:pinterest.com/pin {t}", n=10)
+            res = [{"id": "", "title": r["title"], "url": r["url"], "thumb": ""}
+                   for r in rs if "pinterest.com/pin" in r["url"]]
+            if res:
+                note = f"از {eng} (پین‌های ایندکس‌شده)"
+        except Exception:  # noqa: BLE001
+            res = []
+    if not res:
+        send_message(chat_id,
+                     f"❌ جستجو نتیجه‌ای نداشت {('({})'.format(note)) if note else ''}.\n"
+                     "پینترست جستجو از سرور را معمولاً محدود می‌کند؛ دو راه داری:\n"
+                     "• لینک پین را مستقیم بفرست (همیشه کار می‌کند)\n"
+                     "• یا ربات را روی IP شخصی اجرا کن", kb=HOME_KB)
         return
     d["results"] = res
-    lines = [f"📌 نتایج «{t}»:", ""]
+    lines = [f"📌 نتایج «{t}»:" + (f" ({note})" if note else ""),
+             "👇 روی هر نتیجه بزن تا همان پین با بالاترین کیفیت دانلود شود:", ""]
     for i, p in enumerate(res, 1):
         lines.append(f"{i}. {p['title'] or '(بدون عنوان)'}")
-        lines.append(f"    {p['url']}")
-    lines.append("")
-    lines.append("🔢 شماره بفرست تا تصویر/ویدیوی اصلی با بالاترین کیفیت دانلود شود.")
-    send_message(chat_id, "\n".join(lines), kb=HOME_KB)
+    send_message(chat_id, "\n".join(lines), kb=_results_kb(res))
